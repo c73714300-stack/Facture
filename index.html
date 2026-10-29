@@ -12,9 +12,15 @@
   body { margin:0; font-family:system-ui,Arial,sans-serif; background:var(--bg); color:#222; }
   .wrap { max-width:900px; margin:0 auto; padding:16px; }
   h1 { font-size:1.3rem; margin:8px 0 16px; }
+  h2 { font-size:1rem; margin:0 0 12px; color:var(--accent); }
   .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:14px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .full { grid-column:1 / -1; }
   label { font-size:.8rem; color:#555; display:block; margin-bottom:4px; }
-  input[type=text], input[type=number] { width:100%; padding:9px; border:1px solid var(--line); border-radius:6px; font-size:1rem; }
+  input[type=text], input[type=number], input[type=date] { width:100%; padding:9px; border:1px solid var(--line); border-radius:6px; font-size:1rem; }
+  .logo-box { display:flex; align-items:center; gap:12px; }
+  .logo-prev { width:80px; height:80px; border:1px dashed #aaa; border-radius:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; background:#fafafa; font-size:.75rem; color:#777; text-align:center; }
+  .logo-prev img { max-width:100%; max-height:100%; }
   .row { display:grid; grid-template-columns:90px 1fr 1fr 1fr 40px; gap:10px; align-items:center; padding:10px 0; border-bottom:1px solid #eee; }
   .row.head { font-weight:600; font-size:.8rem; color:#555; border-bottom:2px solid var(--line); }
   .photo { width:80px; height:80px; border:1px dashed #aaa; border-radius:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; background:#fafafa; font-size:.7rem; color:#777; text-align:center; }
@@ -23,10 +29,12 @@
   button { cursor:pointer; border:0; border-radius:8px; padding:11px 16px; font-size:1rem; }
   .primary { background:var(--accent); color:#fff; }
   .secondary { background:#e8eaee; }
+  .small { padding:6px 10px; font-size:.8rem; }
   .del { background:#fde8e8; color:#a00; padding:8px; }
   .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
   .grand { font-size:1.2rem; font-weight:700; text-align:right; margin-top:12px; }
   @media (max-width:640px){
+    .grid { grid-template-columns:1fr; }
     .row { grid-template-columns:80px 1fr 1fr; }
     .row.head { display:none; }
     .total-cell { grid-column:1 / 3; text-align:left; }
@@ -38,11 +46,35 @@
   <h1>🧾 Générateur de facture PDF</h1>
 
   <div class="card">
-    <label for="contact">Ligne de pied de page (nom de l'entreprise + contact)</label>
-    <input type="text" id="contact" value="Keur Ya Amy Fashio : +86 134 3038 5720">
+    <h2>Votre entreprise (en-tête)</h2>
+    <div class="grid">
+      <div class="full logo-box">
+        <div class="logo-prev" id="logoPrev">+ Logo</div>
+        <div>
+          <label>Logo (facultatif)</label>
+          <button class="secondary small" id="logoDel" type="button">Retirer le logo</button>
+        </div>
+      </div>
+      <div><label for="company">Nom de l'entreprise</label><input type="text" id="company" value="Keur Ya Amy Fashio"></div>
+      <div><label for="tagline">Slogan / activité</label><input type="text" id="tagline" value="Mode, beauté & art de la table"></div>
+      <div><label for="address">Adresse</label><input type="text" id="address" placeholder="Ex : Dakar, Sénégal"></div>
+      <div><label for="phone">Téléphone / e-mail</label><input type="text" id="phone" value="+86 134 3038 5720"></div>
+    </div>
   </div>
 
   <div class="card">
+    <h2>Facture et client</h2>
+    <div class="grid">
+      <div><label for="invNum">N° de facture</label><input type="text" id="invNum" value="FAC-0001"></div>
+      <div><label for="invDate">Date</label><input type="date" id="invDate"></div>
+      <div><label for="cPrenom">Prénom du client</label><input type="text" id="cPrenom" autocomplete="off"></div>
+      <div><label for="cNom">Nom du client</label><input type="text" id="cNom" autocomplete="off"></div>
+      <div class="full"><label for="cTel">Téléphone du client (facultatif)</label><input type="text" id="cTel" autocomplete="off"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Produits</h2>
     <div class="row head"><div>Photo</div><div>Quantité</div><div>Prix unitaire</div><div style="text-align:right">Prix total</div><div></div></div>
     <div id="rows"></div>
     <div class="actions">
@@ -51,34 +83,56 @@
     <div class="grand">TOTAL : <span id="grand">0</span> FCFA</div>
   </div>
 
+  <div class="card">
+    <label for="footer">Ligne de pied de page (affichée sur chaque page)</label>
+    <input type="text" id="footer" value="Keur Ya Amy Fashio : +86 134 3038 5720">
+  </div>
+
   <div class="actions">
     <button class="primary" id="pdf">📄 Générer le PDF</button>
-    <button class="secondary" id="reset">Tout effacer</button>
+    <button class="secondary" id="reset">Nouvelle facture</button>
   </div>
 </div>
 
 <input type="file" id="file" accept="image/*" hidden>
+<input type="file" id="logoFile" accept="image/*" hidden>
 
 <script>
+const $ = id => document.getElementById(id);
 const fmt = n => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
+const FIELDS = ["company","tagline","address","phone","invNum","invDate","cPrenom","cNom","cTel","footer"];
+const KEY = "facture_data_v2";
 let rows = [];
+let logo = null;       // {img,w,h}
 let pickIndex = null;
-const KEY = "facture_data_v1";
+
+function newRow(){ return {img:null, w:0, h:0, qty:1, price:0}; }
+function todayStr(){ const d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function fmtDate(s){ if(!s) return ""; const [y,m,d] = s.split("-"); return `${d}/${m}/${y}`; }
 
 function save(){
-  try { localStorage.setItem(KEY, JSON.stringify({rows, contact: contact.value})); } catch(e){}
+  try {
+    const f = {}; FIELDS.forEach(k => f[k] = $(k).value);
+    localStorage.setItem(KEY, JSON.stringify({rows, logo, f}));
+  } catch(e){}
 }
 function load(){
   try {
     const d = JSON.parse(localStorage.getItem(KEY) || "null");
-    if (d){ rows = d.rows || []; if (d.contact) contact.value = d.contact; }
+    if (d){
+      rows = d.rows || []; logo = d.logo || null;
+      if (d.f) FIELDS.forEach(k => { if (d.f[k] !== undefined) $(k).value = d.f[k]; });
+    }
   } catch(e){}
   if (!rows.length) rows.push(newRow());
+  if (!$("invDate").value) $("invDate").value = todayStr();
 }
-function newRow(){ return {img:null, w:0, h:0, qty:1, price:0}; }
 
+function renderLogo(){
+  $("logoPrev").innerHTML = logo ? `<img src="${logo.img}">` : "+ Logo";
+}
 function render(){
-  const box = document.getElementById("rows");
+  const box = $("rows");
   box.innerHTML = "";
   rows.forEach((r,i)=>{
     const el = document.createElement("div");
@@ -91,70 +145,145 @@ function render(){
       <div><button class="del" data-del="${i}" title="Supprimer">✕</button></div>`;
     box.appendChild(el);
   });
+  renderLogo();
   updateTotals();
 }
 function updateTotals(){
   let g = 0;
-  rows.forEach((r,i)=>{ const t = r.qty*r.price; g += t; const c = document.getElementById("t"+i); if(c) c.textContent = fmt(t); });
-  document.getElementById("grand").textContent = fmt(g);
+  rows.forEach((r,i)=>{ const t = r.qty*r.price; g += t; const c = $("t"+i); if(c) c.textContent = fmt(t); });
+  $("grand").textContent = fmt(g);
   save();
 }
 
-document.getElementById("rows").addEventListener("input", e=>{
+$("rows").addEventListener("input", e=>{
   const f = e.target.dataset.f; if(!f) return;
   rows[+e.target.dataset.i][f] = parseFloat(e.target.value) || 0;
   updateTotals();
 });
-document.getElementById("rows").addEventListener("click", e=>{
+$("rows").addEventListener("click", e=>{
   const p = e.target.closest(".photo");
-  if (p){ pickIndex = +p.dataset.i; document.getElementById("file").click(); return; }
+  if (p){ pickIndex = +p.dataset.i; $("file").click(); return; }
   const d = e.target.closest("[data-del]");
   if (d){ rows.splice(+d.dataset.del,1); if(!rows.length) rows.push(newRow()); render(); }
 });
-document.getElementById("add").onclick = ()=>{ rows.push(newRow()); render(); };
-document.getElementById("reset").onclick = ()=>{ if(confirm("Effacer toute la facture ?")){ rows=[newRow()]; render(); } };
-contact.addEventListener("input", save);
+$("add").onclick = ()=>{ rows.push(newRow()); render(); };
+FIELDS.forEach(k => $(k).addEventListener("input", save));
 
-document.getElementById("file").addEventListener("change", e=>{
-  const f = e.target.files[0]; e.target.value = "";
-  if (!f || pickIndex===null) return;
+function readImage(file, max, keepPng, cb){
   const reader = new FileReader();
   reader.onload = ()=>{
     const img = new Image();
     img.onload = ()=>{
-      const max = 300, s = Math.min(1, max/Math.max(img.width, img.height));
+      const s = Math.min(1, max/Math.max(img.width, img.height));
       const c = document.createElement("canvas");
       c.width = Math.round(img.width*s); c.height = Math.round(img.height*s);
       const ctx = c.getContext("2d");
-      ctx.fillStyle = "#fff"; ctx.fillRect(0,0,c.width,c.height);
+      if (!keepPng){ ctx.fillStyle = "#fff"; ctx.fillRect(0,0,c.width,c.height); }
       ctx.drawImage(img,0,0,c.width,c.height);
-      rows[pickIndex].img = c.toDataURL("image/jpeg",0.8);
-      rows[pickIndex].w = c.width; rows[pickIndex].h = c.height;
-      render();
+      cb({img: keepPng ? c.toDataURL("image/png") : c.toDataURL("image/jpeg",0.8), w:c.width, h:c.height});
     };
     img.src = reader.result;
   };
-  reader.readAsDataURL(f);
+  reader.readAsDataURL(file);
+}
+$("file").addEventListener("change", e=>{
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f || pickIndex===null) return;
+  readImage(f, 300, false, o => { Object.assign(rows[pickIndex], o); render(); });
 });
+$("logoPrev").onclick = ()=> $("logoFile").click();
+$("logoFile").addEventListener("change", e=>{
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  readImage(f, 400, true, o => { logo = o; renderLogo(); save(); });
+});
+$("logoDel").onclick = ()=>{ logo = null; renderLogo(); save(); };
 
-document.getElementById("pdf").onclick = ()=>{
+$("reset").onclick = ()=>{
+  if(!confirm("Commencer une nouvelle facture ? Les produits et le client seront effacés (l'en-tête est conservé).")) return;
+  rows = [newRow()];
+  ["cPrenom","cNom","cTel"].forEach(k => $(k).value = "");
+  $("invDate").value = todayStr();
+  render();
+};
+
+function nextNumber(s){
+  const m = s.match(/^(.*?)(\d+)(\D*)$/);
+  if (!m) return s;
+  return m[1] + String(parseInt(m[2],10)+1).padStart(m[2].length,"0") + m[3];
+}
+
+$("pdf").onclick = ()=>{
   if (!window.jspdf){ alert("La bibliothèque PDF n'a pas pu se charger. Vérifiez la connexion internet."); return; }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:"mm", format:"a4"});
+  const RED = [192,0,0];
+  const W = 210;
+
+  // ---------- EN-TÊTE ----------
+  doc.setFillColor(...RED);
+  doc.rect(0, 0, W, 36, "F");
+  let tx = 14;
+  if (logo){
+    doc.setFillColor(255,255,255);
+    doc.roundedRect(14, 5, 26, 26, 2, 2, "F");
+    const k = Math.min(22/logo.w, 22/logo.h);
+    const w = logo.w*k, h = logo.h*k;
+    doc.addImage(logo.img, "PNG", 14+(26-w)/2, 5+(26-h)/2, w, h);
+    tx = 46;
+  }
+  doc.setTextColor(255,255,255);
+  doc.setFont("helvetica","bold"); doc.setFontSize(20);
+  doc.text(($("company").value || "").toUpperCase(), tx, 15);
+  doc.setFont("helvetica","normal"); doc.setFontSize(10);
+  let ly = 22;
+  if ($("tagline").value){ doc.setFont("helvetica","italic"); doc.text($("tagline").value, tx, ly); ly += 5; }
+  doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  if ($("address").value){ doc.text($("address").value, tx, ly); ly += 4.5; }
+  if ($("phone").value){ doc.text($("phone").value, tx, ly); }
+
+  doc.setFont("helvetica","bold"); doc.setFontSize(24);
+  doc.text("FACTURE", W-14, 16, {align:"right"});
+  doc.setFont("helvetica","normal"); doc.setFontSize(10);
+  doc.text("N° " + $("invNum").value, W-14, 24, {align:"right"});
+  doc.text("Date : " + fmtDate($("invDate").value), W-14, 30, {align:"right"});
+
+  // ---------- CLIENT ----------
+  doc.setTextColor(0,0,0);
+  doc.setFillColor(245,245,245);
+  doc.roundedRect(14, 43, 90, 22, 2, 2, "F");
+  doc.setDrawColor(...RED); doc.setLineWidth(0.8); doc.line(14, 43, 14, 65);
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(120,120,120);
+  doc.text("FACTURÉ À", 19, 49);
+  doc.setFontSize(13); doc.setTextColor(0,0,0);
+  const client = (($("cPrenom").value + " " + $("cNom").value.toUpperCase())).trim() || "—";
+  doc.text(client, 19, 57);
+  if ($("cTel").value){ doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.text("Tél : " + $("cTel").value, 19, 62.5); }
+
+  // ---------- TABLEAU ----------
   const body = rows.map(r=>["", String(r.qty), fmt(r.price), fmt(r.qty*r.price)]);
   const total = rows.reduce((s,r)=>s+r.qty*r.price,0);
   const rowH = 26;
+  const footerText = $("footer").value;
+
+  function drawFooter(){
+    doc.setDrawColor(...RED); doc.setLineWidth(0.4);
+    doc.line(14, 285, 196, 285);
+    doc.setFont("times","italic"); doc.setFontSize(10); doc.setTextColor(0,0,0);
+    doc.text(footerText, 105, 290, {align:"center"});
+  }
 
   doc.autoTable({
+    startY: 72,
     head: [["PRODUIT","QUANTITE","Prix Unitaire","Prix Total"]],
     body,
     foot: [[{content:"TOTAL", styles:{halign:"center"}}, {content: fmt(total)+" FCFA", colSpan:3, styles:{halign:"center"}}]],
     showFoot: "lastPage",
     theme: "grid",
-    margin: {left:14, right:14, top:14, bottom:25},
+    margin: {left:14, right:14, top:14, bottom:22},
     styles: {font:"times", fontSize:11, halign:"center", valign:"middle", textColor:0, lineColor:0, lineWidth:0.2, minCellHeight:rowH},
     headStyles: {fillColor:[217,217,217], textColor:0, fontStyle:"bold", minCellHeight:12},
-    footStyles: {fillColor:255, textColor:0, fontStyle:"bold", minCellHeight:10},
+    footStyles: {fillColor:[245,245,245], textColor:0, fontStyle:"bold", fontSize:12, minCellHeight:12},
     didDrawCell: d=>{
       if (d.section==="body" && d.column.index===0){
         const r = rows[d.row.index];
@@ -165,18 +294,16 @@ document.getElementById("pdf").onclick = ()=>{
           doc.addImage(r.img, "JPEG", d.cell.x+(d.cell.width-w)/2, d.cell.y+(d.cell.height-h)/2, w, h);
         }
       }
-    }
+    },
+    didDrawPage: drawFooter
   });
 
-  const n = doc.getNumberOfPages();
-  doc.setPage(n);
-  const y = Math.min(doc.lastAutoTable.finalY + 14, 285);
-  doc.setDrawColor(192,0,0); doc.setLineWidth(0.4);
-  doc.line(14, y, 196, y);
-  doc.setFont("times","italic"); doc.setFontSize(10);
-  doc.text(contact.value, 105, y+5, {align:"center"});
+  const safe = s => s.replace(/[^\w\-]+/g,"_");
+  const who = safe(($("cNom").value || $("cPrenom").value || "client").trim());
+  doc.save(`facture_${safe($("invNum").value)}_${who}.pdf`);
 
-  doc.save("facture.pdf");
+  $("invNum").value = nextNumber($("invNum").value);
+  save();
 };
 
 load(); render();
